@@ -43,6 +43,8 @@ type CSIConnection interface {
 
 	// Close the connection
 	Close() error
+
+	GetCapacity(ctx context.Context, in *csi.GetCapacityRequest, opts ...grpc.CallOption) (*csi.GetCapacityResponse, error)
 }
 
 type csiConnection struct {
@@ -130,6 +132,13 @@ func (c *csiConnection) NodeGetId(ctx context.Context) (string, error) {
 
 func (c *csiConnection) Close() error {
 	return c.conn.Close()
+}
+
+// GetCapacity implements csi method
+func (c *csiConnection) GetCapacity(ctx context.Context, in *csi.GetCapacityRequest, opts ...grpc.CallOption) (*csi.GetCapacityResponse, error) {
+	client := csi.NewControllerClient(c.conn)
+	rsp, err := client.GetCapacity(ctx, in, opts...)
+	return rsp, err
 }
 
 func logGRPC(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {

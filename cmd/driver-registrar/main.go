@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	"github.com/golang/glog"
@@ -34,6 +35,7 @@ import (
 	"k8s.io/client-go/util/retry"
 
 	"github.com/kubernetes-csi/driver-registrar/pkg/connection"
+	"github.com/kubernetes-csi/driver-registrar/pkg/local-csi-driver"
 )
 
 const (
@@ -101,6 +103,16 @@ func main() {
 	}
 	glog.V(2).Infof("CSI driver node ID: %q", csiDriverNodeId)
 
+	glog.V(1).Infof("Calling CSI driver to get node capacity.")
+	ctx, cancel = context.WithTimeout(context.Background(), csiTimeout)
+	defer cancel()
+	csiDriverCapacity, err := local_csi_driver.LocalCSIDriverGetCapacity(csiConn, ctx)
+	if err != nil {
+		glog.Error(err.Error())
+		os.Exit(1)
+	}
+	glog.V(2).Infof("CSI node capacity:%d bytes", csiDriverCapacity)
+
 	// Create the client config. Use kubeconfig if given, otherwise assume
 	// in-cluster.
 	glog.V(1).Infof("Loading kubeconfig.")
@@ -144,6 +156,8 @@ func main() {
 			k8sNodesClient,
 			csiDriverName,
 			csiDriverNodeId)
+
+		local_csi_driver.GetVerifyAndAddNodeId(k8sNodeName, k8sNodesClient, csiDriverName, strconv.FormatInt(csiDriverCapacity, 10))
 		time.Sleep(sleepDuration)
 	}
 }
@@ -218,11 +232,17 @@ func getVerifyAndAddNodeId(
 			string(jsonObj))
 		_, updateErr := k8sNodesClient.Update(result)
 		if updateErr == nil {
-			fmt.Printf(
+			glog.V(1).Infof(
 				"Updated node %q successfully for CSI driver %q and CSI node name %q",
 				k8sNodeName,
 				csiDriverName,
 				csiDriverNodeId)
+		} else {
+			glog.V(1).Infof(
+				"Updated node %q error for CSI driver %q and CSI node name %q: %v",
+				k8sNodeName,
+				csiDriverName,
+				csiDriverNodeId, updateErr)
 		}
 		return updateErr // do not wrap error
 	})
